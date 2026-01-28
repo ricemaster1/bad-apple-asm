@@ -3,3 +3,6 @@ armlite_manual.txt
 *.pdf
 *.webm
 *.mp4
+
+# Folders
+test_programs/

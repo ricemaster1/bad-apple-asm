@@ -56,8 +56,8 @@ def emit_segment_bitpacked(mask_files: List[Path], out_dir: Path, seg_idx: int):
 
         # runtime
         fh.write('    MOV R0, #0x000000    ; black colour\n')
-        fh.write('    MOV R1, #.PixelScreen ; base address for pixel writes\n')
-        fh.write('    MOV R2, #frames_data  ; pointer to packed frames\n')
+        fh.write('    MOV R1, .PixelScreen ; base address for pixel writes\n')
+        fh.write('    MOV R2, frames_data  ; pointer to packed frames\n')
         fh.write(f'    MOV R3, #{n}         ; frame count\n')
         fh.write(f'    MOV R4, #{bytes_per_frame} ; bytes/frame\n')
         fh.write('    MOV R5, #0           ; frame index\n')

@@ -2,8 +2,8 @@
 ; frames=256 w=128 h=96 bytes_per_frame=1536
 
     MOV R0, #0x000000    ; black colour
-    MOV R1, #.PixelScreen ; base address for pixel writes
-    MOV R2, #frames_data  ; pointer to packed frames
+    MOV R1, .PixelScreen ; base address for pixel writes
+    MOV R2, frames_data  ; pointer to packed frames
     MOV R3, #256         ; frame count
     MOV R4, #1536 ; bytes/frame
     MOV R5, #0           ; frame index
