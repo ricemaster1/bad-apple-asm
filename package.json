@@ -1,0 +1,14 @@
+{
+  "name": "bad-apple-armlite",
+  "version": "1.0.0",
+  "description": "Bad Apple!! renderer for ARMLite simulator",
+  "scripts": {
+    "play": "node play_bad_apple.js",
+    "play:local": "node play_bad_apple.js --local",
+    "play:10fps": "node play_bad_apple.js --fps 10",
+    "play:audio": "node play_bad_apple.js --audio bad_apple.mp3"
+  },
+  "dependencies": {
+    "playwright": "^1.35.0"
+  }
+}

@@ -1,9 +1,19 @@
 # Files
+*.asm
 armlite_manual.txt
+mask.txt
+frame2arm
 *.pdf
 *.webm
 *.mp4
 lib/README.md
 
 # Folders
+frames/
 test_programs/
+tampermonkey/
+local_gui/
+masks/
+segments/
+segments_bitpacked/
+dev/
