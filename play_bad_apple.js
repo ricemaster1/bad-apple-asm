@@ -181,8 +181,7 @@ async function main() {
       await page.evaluate(({b64,mime}) => {
         const a = document.createElement('audio');
         a.id = 'ba-audio'; a.src = `data:${mime};base64,${b64}`;
-        a.controls = true;
-        Object.assign(a.style, {position:'fixed',bottom:'10px',right:'10px',zIndex:'9999'});
+        a.style.display = 'none';
         document.body.appendChild(a);
       }, {b64,mime});
     } else console.warn('Audio not found:', ap);
