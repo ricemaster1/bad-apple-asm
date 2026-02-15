@@ -193,9 +193,75 @@ async function main() {
   await page.evaluate((fps) => {
     const D = window._bd;
     const ms = 1000 / fps;
-    let fi = 0, t0 = null, skip = 0;
+    const totalSec = D.length / fps;
+    let fi = 0;           // next frame index to apply (frames 0..fi-1 are applied)
+    let skip = 0;
+    let paused = false;
+    let t0 = null;        // fallback clock start (used when no audio)
+    let pauseOffset = 0;  // accumulated paused time for fallback clock
 
-    // HUD overlay
+    const audio = document.getElementById('ba-audio');
+    const hasAudio = !!audio;
+
+    // ── Build keyframe snapshots for fast seeking ──
+    // Every KEYFRAME_INTERVAL frames, store a full pixel state snapshot
+    const KF_INT = Math.max(1, fps * 2); // every ~2 seconds
+    const keyframes = new Map(); // frameIndex → Uint32Array(pixelAreaSize)
+
+    // ── Transport controls bar ──
+    const bar = document.createElement('div');
+    bar.id = 'ba-controls';
+    Object.assign(bar.style, {
+      position:'fixed', bottom:'0', left:'0', right:'0', zIndex:'10001',
+      background:'rgba(0,0,0,.85)', padding:'8px 12px',
+      display:'flex', alignItems:'center', gap:'8px',
+      fontFamily:'monospace', fontSize:'13px', color:'#fff',
+    });
+    document.body.appendChild(bar);
+
+    // Play/Pause button
+    const playBtn = document.createElement('button');
+    playBtn.textContent = '⏸';
+    Object.assign(playBtn.style, {
+      fontSize:'18px', background:'none', border:'1px solid #666',
+      color:'#fff', borderRadius:'4px', padding:'2px 10px', cursor:'pointer',
+    });
+    bar.appendChild(playBtn);
+
+    // Rewind button
+    const rewBtn = document.createElement('button');
+    rewBtn.textContent = '⏮';
+    Object.assign(rewBtn.style, {
+      fontSize:'18px', background:'none', border:'1px solid #666',
+      color:'#fff', borderRadius:'4px', padding:'2px 10px', cursor:'pointer',
+    });
+    bar.appendChild(rewBtn);
+
+    // Time label (left)
+    const timeLabel = document.createElement('span');
+    timeLabel.style.minWidth = '55px';
+    timeLabel.textContent = '0:00';
+    bar.appendChild(timeLabel);
+
+    // Seek bar
+    const seekBar = document.createElement('input');
+    seekBar.type = 'range'; seekBar.min = '0'; seekBar.max = String(D.length - 1);
+    seekBar.value = '0'; seekBar.step = '1';
+    Object.assign(seekBar.style, { flex:'1', cursor:'pointer', accentColor:'#0f0' });
+    bar.appendChild(seekBar);
+
+    // Duration label (right)
+    const durLabel = document.createElement('span');
+    durLabel.style.minWidth = '55px';
+    durLabel.textContent = fmtTime(totalSec);
+    bar.appendChild(durLabel);
+
+    // Frame counter
+    const frameLbl = document.createElement('span');
+    frameLbl.style.minWidth = '100px'; frameLbl.style.textAlign = 'right';
+    bar.appendChild(frameLbl);
+
+    // HUD overlay (top-right)
     const hud = document.createElement('div');
     Object.assign(hud.style, {
       position:'fixed', top:'5px', right:'5px', zIndex:'10000',
@@ -205,47 +271,207 @@ async function main() {
     hud.id = 'ba-hud';
     document.body.appendChild(hud);
 
-    function draw(idx) {
+    // ── Helpers ──
+    function fmtTime(s) {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return m + ':' + String(sec).padStart(2, '0');
+    }
+
+    function drawDelta(idx) {
       const [bl, wh] = D[idx];
       for (let i = 0; i < bl.length; i++) {
         const p = bl[i];
         if (p >= 0 && p < pixelAreaSize && v1address[p] !== 0) {
           v1address[p] = 0;
-          document.getElementById('p'+p).style.background = '#000';
+          document.getElementById('p' + p).style.background = '#000';
         }
       }
       for (let i = 0; i < wh.length; i++) {
         const p = wh[i];
         if (p >= 0 && p < pixelAreaSize && v1address[p] !== 0xFFFFFF) {
           v1address[p] = 0xFFFFFF;
-          document.getElementById('p'+p).style.background = '#FFF';
+          document.getElementById('p' + p).style.background = '#FFF';
         }
       }
     }
 
-    function tick(ts) {
-      if (t0 === null) {
-        t0 = ts;
-        const au = document.getElementById('ba-audio');
-        if (au) au.play().catch(()=>{});
+    function clearScreen() {
+      for (let i = 0; i < pixelAreaSize; i++) {
+        if (v1address[i] !== 0xFFFFFF) {
+          v1address[i] = 0xFFFFFF;
+          document.getElementById('p' + i).style.background = '#FFF';
+        }
       }
-      const el = ts - t0;
-      const target = Math.floor(el / ms);
+    }
+
+    function saveKeyframe(frameIdx) {
+      const snap = new Uint32Array(pixelAreaSize);
+      for (let i = 0; i < pixelAreaSize; i++) snap[i] = v1address[i];
+      keyframes.set(frameIdx, snap);
+    }
+
+    function restoreKeyframe(snap) {
+      for (let i = 0; i < pixelAreaSize; i++) {
+        const c = snap[i];
+        if (v1address[i] !== c) {
+          v1address[i] = c;
+          document.getElementById('p' + i).style.background =
+            c === 0 ? '#000' : c === 0xFFFFFF ? '#FFF' : '#' + c.toString(16).padStart(6, '0');
+        }
+      }
+    }
+
+    // Seek to a specific frame index
+    function seekTo(targetFrame) {
+      targetFrame = Math.max(0, Math.min(targetFrame, D.length - 1));
+
+      // Find the nearest keyframe at or before targetFrame
+      let bestKf = 0;
+      for (const kfIdx of keyframes.keys()) {
+        if (kfIdx <= targetFrame && kfIdx >= bestKf) bestKf = kfIdx;
+      }
+
+      if (keyframes.has(bestKf) && bestKf > 0) {
+        restoreKeyframe(keyframes.get(bestKf));
+        fi = bestKf;
+      } else {
+        // Rebuild from scratch
+        clearScreen();
+        fi = 0;
+      }
+
+      // Apply deltas from bestKf (or 0) up to targetFrame
+      while (fi <= targetFrame) {
+        drawDelta(fi);
+        fi++;
+      }
+
+      // Sync audio position
+      if (hasAudio) {
+        audio.currentTime = targetFrame / fps;
+      } else {
+        t0 = performance.now() - (targetFrame / fps) * 1000;
+        pauseOffset = 0;
+      }
+    }
+
+    function getCurrentTimeSec() {
+      if (hasAudio) return audio.currentTime;
+      if (t0 === null) return 0;
+      return (performance.now() - t0 - pauseOffset) / 1000;
+    }
+
+    // ── Controls wiring ──
+    function togglePause() {
+      paused = !paused;
+      playBtn.textContent = paused ? '▶' : '⏸';
+      if (hasAudio) {
+        if (paused) audio.pause();
+        else audio.play().catch(() => {});
+      } else {
+        if (paused) {
+          window._baPauseStart = performance.now();
+        } else if (window._baPauseStart) {
+          pauseOffset += performance.now() - window._baPauseStart;
+          window._baPauseStart = null;
+        }
+      }
+    }
+
+    playBtn.addEventListener('click', togglePause);
+
+    rewBtn.addEventListener('click', () => {
+      seekTo(0);
+      if (paused) togglePause(); // auto-play on rewind
+    });
+
+    // Seek bar interaction
+    let seeking = false;
+    seekBar.addEventListener('mousedown', () => { seeking = true; });
+    seekBar.addEventListener('input', () => {
+      if (seeking) {
+        const target = parseInt(seekBar.value, 10);
+        seekTo(target);
+      }
+    });
+    seekBar.addEventListener('mouseup', () => { seeking = false; });
+    seekBar.addEventListener('change', () => {
+      seeking = false;
+      const target = parseInt(seekBar.value, 10);
+      seekTo(target);
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+      else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        seekTo(Math.max(0, fi - fps * 5)); // -5 seconds
+      }
+      else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        seekTo(Math.min(D.length - 1, fi + fps * 5)); // +5 seconds
+      }
+      else if (e.code === 'Home') { e.preventDefault(); seekTo(0); }
+      else if (e.code === 'End') { e.preventDefault(); seekTo(D.length - 1); }
+    });
+
+    // ── Audio sync: pause video when audio pauses, and vice versa ──
+    if (hasAudio) {
+      audio.addEventListener('pause', () => {
+        if (!paused && !audio.ended) { paused = true; playBtn.textContent = '▶'; }
+      });
+      audio.addEventListener('play', () => {
+        if (paused) { paused = false; playBtn.textContent = '⏸'; requestAnimationFrame(tick); }
+      });
+      audio.addEventListener('seeked', () => {
+        const target = Math.round(audio.currentTime * fps);
+        seekTo(target);
+      });
+    }
+
+    // ── Main tick loop ──
+    function tick(ts) {
+      if (paused) return; // stop RAF loop; resumed by play handler
+
+      if (t0 === null && !hasAudio) { t0 = ts; }
+
+      // Start audio on first tick
+      if (hasAudio && audio.paused && !audio.ended && fi === 0) {
+        audio.play().catch(() => {});
+      }
+
+      const elSec = getCurrentTimeSec();
+      const target = Math.floor(elSec * fps);
 
       if (target >= D.length) {
         hud.textContent = 'Done! ' + D.length + 'f, ' + skip + ' dropped';
+        playBtn.textContent = '▶';
+        paused = true;
         return;
       }
 
-      // catch up: apply all skipped deltas (keeps pixel state consistent)
-      while (fi < target && fi < D.length - 1) { draw(fi); fi++; skip++; }
-      if (fi <= target && fi < D.length) { draw(fi); fi++; }
-
-      if (fi % 30 === 0 || fi >= D.length) {
-        const s = (el/1000).toFixed(1);
-        const f = (fi/(el/1000||1)).toFixed(1);
-        hud.textContent = fi+'/'+D.length+' | '+s+'s | '+f+'fps | '+skip+' drop';
+      // Catch up: apply skipped deltas to keep pixel state consistent
+      while (fi < target && fi < D.length - 1) { drawDelta(fi); fi++; skip++; }
+      if (fi <= target && fi < D.length) {
+        drawDelta(fi);
+        // Save keyframe periodically
+        if (fi % KF_INT === 0 && !keyframes.has(fi)) saveKeyframe(fi);
+        fi++;
       }
+
+      // Update UI
+      if (fi % 10 === 0 || fi >= D.length) {
+        const secNow = elSec.toFixed(1);
+        const curFps = (fi / (elSec || 0.001)).toFixed(1);
+        hud.textContent = fi + '/' + D.length + ' | ' + secNow + 's | ' + curFps + 'fps | ' + skip + ' drop';
+        timeLabel.textContent = fmtTime(elSec);
+        if (!seeking) seekBar.value = String(fi);
+        frameLbl.textContent = fi + '/' + D.length;
+      }
+
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
@@ -260,7 +486,7 @@ async function main() {
       return h ? h.textContent : '';
     }).catch(() => '');
     if (st && st !== last) { console.log('  [browser]', st); last = st; }
-    if (st.startsWith('Done!')) { console.log('\nPlayback complete!'); break; }
+    if (/^Done!/.test(st)) { console.log('\nPlayback complete!'); break; }
   }
 
   console.log('Close the browser when ready or press Ctrl+C.');
