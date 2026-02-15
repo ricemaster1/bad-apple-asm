@@ -202,6 +202,7 @@ async function main() {
 
     const audio = document.getElementById('ba-audio');
     const hasAudio = !!audio;
+    let _seekGuard = false;  // prevents seekTo ↔ seeked event feedback loop
 
     // ── Build keyframe snapshots for fast seeking ──
     // Every KEYFRAME_INTERVAL frames, store a full pixel state snapshot
@@ -349,6 +350,7 @@ async function main() {
 
       // Sync audio position
       if (hasAudio) {
+        _seekGuard = true;
         audio.currentTime = targetFrame / fps;
       } else {
         t0 = performance.now() - (targetFrame / fps) * 1000;
@@ -377,6 +379,7 @@ async function main() {
           window._baPauseStart = null;
         }
       }
+      if (!paused) requestAnimationFrame(tick); // restart RAF loop
     }
 
     playBtn.addEventListener('click', togglePause);
@@ -424,9 +427,12 @@ async function main() {
         if (!paused && !audio.ended) { paused = true; playBtn.textContent = '▶'; }
       });
       audio.addEventListener('play', () => {
+        // Handle external play (e.g. native audio controls); our togglePause handles our button
         if (paused) { paused = false; playBtn.textContent = '⏸'; requestAnimationFrame(tick); }
       });
       audio.addEventListener('seeked', () => {
+        // Guard: ignore seeked events triggered by our own seekTo()
+        if (_seekGuard) { _seekGuard = false; return; }
         const target = Math.round(audio.currentTime * fps);
         seekTo(target);
       });
