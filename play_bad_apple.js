@@ -11,7 +11,8 @@
  *
  * Options:
  *   --masks-dir <path>   Mask JSON directory        (default: ./masks)
- *   --fps <number>       Target FPS                 (default: 30)
+ *   --fps <number>       Target FPS / playback speed (default: 30) [BETA]
+ *                         Values != 30 scale playback speed and audio rate.
  *   --url <url>          ARMLite URL                (default: online)
  *   --audio <path>       Audio file to play (mp3/wav/ogg)
  *   --start-frame <n>    First frame number         (default: 1)
@@ -31,7 +32,7 @@ const { hideBin } = require('yargs/helpers');
 function parseArgs() {
   const base = yargs(hideBin(process.argv))
     .option('masks-dir', { type: 'string', default: './masks' })
-    .option('fps', { type: 'number', default: 30 })
+    .option('fps', { type: 'number', default: 30, describe: '[BETA] Playback speed (30 = 1x)' })
     .option('url', { type: 'string', default: 'https://peterhigginson.co.uk/ARMlite/' })
     .option('audio', { type: 'string', default: null })
     .option('start-frame', { type: 'number', default: 1 })
