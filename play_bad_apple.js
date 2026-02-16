@@ -24,30 +24,53 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
+const yargs = require('yargs/yargs');
+const { hideBin } = require('yargs/helpers');
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 function parseArgs() {
-  const a = process.argv.slice(2);
-  const o = {
-    masksDir: './masks', fps: 30,
-    url: 'https://peterhigginson.co.uk/ARMlite/',
-    audio: null, startFrame: 1, endFrame: Infinity,
-    browser: null, headless: false, local: false,
+  const base = yargs(hideBin(process.argv))
+    .option('masks-dir', { type: 'string', default: './masks' })
+    .option('fps', { type: 'number', default: 30 })
+    .option('url', { type: 'string', default: 'https://peterhigginson.co.uk/ARMlite/' })
+    .option('audio', { type: 'string', default: null })
+    .option('start-frame', { type: 'number', default: 1 })
+    .option('end-frame', { type: 'number' })
+    .option('browser', { type: 'string', default: null })
+    .option('headless', { type: 'boolean', default: false })
+    .option('local', { type: 'boolean', default: false })
+    .help(false)
+    .version(false)
+    .strict()
+    .check(argv => {
+      if (typeof argv.fps !== 'number' || argv.fps <= 0) throw new Error('`--fps` must be a positive number');
+      if (!Number.isInteger(argv['start-frame']) || argv['start-frame'] < 1) throw new Error('`--start-frame` must be an integer ≥ 1');
+      if (argv['end-frame'] !== undefined) {
+        if (!Number.isInteger(argv['end-frame']) || argv['end-frame'] < 1) throw new Error('`--end-frame` must be an integer ≥ 1');
+        if (argv['end-frame'] < argv['start-frame']) throw new Error('`--end-frame` must be ≥ `--start-frame`');
+      }
+      if (!fs.existsSync(argv['masks-dir']) || !fs.statSync(argv['masks-dir']).isDirectory()) {
+        throw new Error(`Masks directory not found: ${argv['masks-dir']}`);
+      }
+      return true;
+    });
+
+  const argv = base.parse();
+
+  const opts = {
+    masksDir: argv['masks-dir'],
+    fps: argv.fps,
+    url: argv.url,
+    audio: argv.audio,
+    startFrame: argv['start-frame'],
+    endFrame: argv['end-frame'] !== undefined ? argv['end-frame'] : Infinity,
+    browser: argv.browser,
+    headless: argv.headless,
+    local: argv.local,
   };
-  for (let i = 0; i < a.length; i++) {
-    const k = a[i];
-    if (k === '--masks-dir')    o.masksDir    = a[++i];
-    else if (k === '--fps')     o.fps         = Number(a[++i]);
-    else if (k === '--url')     o.url         = a[++i];
-    else if (k === '--audio')   o.audio       = a[++i];
-    else if (k === '--start-frame') o.startFrame = Number(a[++i]);
-    else if (k === '--end-frame')   o.endFrame   = Number(a[++i]);
-    else if (k === '--browser') o.browser     = a[++i];
-    else if (k === '--headless') o.headless   = true;
-    else if (k === '--local')   o.local       = true;
-  }
-  if (o.local) o.url = 'http://localhost:3000/';
-  return o;
+
+  if (opts.local) opts.url = 'http://localhost:3000/';
+  return opts;
 }
 
 // ── Mask loading ─────────────────────────────────────────────────────────────
