@@ -214,8 +214,14 @@ async function main() {
   console.log('\n>>> Playback starting! <<<\n');
   await page.evaluate((fps) => {
     const D = window._bd;
+    const SOURCE_FPS = 30;
+    const speedRatio = fps / SOURCE_FPS;
     const ms = 1000 / fps;
     const totalSec = D.length / fps;
+
+    // Derive resolution from pixel area size
+    const RES_MAP = { 3072: [64, 48], 12288: [128, 96] };
+    const [resW, resH] = RES_MAP[pixelAreaSize] || [Math.round(Math.sqrt(pixelAreaSize * 4 / 3)), Math.round(Math.sqrt(pixelAreaSize * 3 / 4))];
     let fi = 0;           // next frame index to apply (frames 0..fi-1 are applied)
     let skip = 0;
     let paused = false;
@@ -375,7 +381,7 @@ async function main() {
       statsPanel.textContent =
         '╔══ Stats for Nerds ══════════════════╗\n' +
         '║ Frame:    ' + fi + ' / ' + D.length + ' (' + pct + '%)\n' +
-        '║ Target:   ' + fps + ' fps\n' +
+        '║ Target:   ' + fps + ' fps (' + speedRatio.toFixed(2) + 'x)\n' +
         '║ Real FPS: ' + realFps + ' (avg tick ' + avgTickMs + 'ms)\n' +
         '║ Tick:     min ' + minTickMs + 'ms / max ' + maxTickMs + 'ms\n' +
         '║ Dropped:  ' + skip + ' frames\n' +
@@ -394,8 +400,7 @@ async function main() {
         '╠══ Session ══════════════════════════╣\n' +
         '║ Uptime:   ' + uptimeSec + 's\n' +
         '║ Ticks:    ' + stats.tickCount + '\n' +
-        '║ Res:      ' + (typeof pixelWidth !== 'undefined' ? pixelWidth : '?') + '×' +
-                        (typeof pixelHeight !== 'undefined' ? pixelHeight : '?') + '\n' +
+        '║ Res:      ' + resW + '×' + resH + '\n' +
         '║ Pixels:   ' + pixelAreaSize + '\n' +
         '║ Audio:    ' + (hasAudio ? 'yes' : 'no') + (hasAudio ? ' (' + audio.duration.toFixed(1) + 's)' : '') + '\n' +
         '╚════════════════════════════════════╝';
@@ -595,8 +600,9 @@ async function main() {
 
       if (t0 === null && !hasAudio) { t0 = ts; }
 
-      // Start audio on first tick
+      // Start audio on first tick, syncing playback rate to fps
       if (hasAudio && audio.paused && !audio.ended && fi === 0) {
+        audio.playbackRate = speedRatio;
         audio.play().catch(() => {});
       }
 
