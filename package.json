@@ -5,8 +5,7 @@
   "scripts": {
     "play": "node play_bad_apple.js",
     "play:local": "node play_bad_apple.js --local",
-    "play:10fps": "node play_bad_apple.js --fps 10",
-    "play:audio": "node play_bad_apple.js --audio bad_apple.mp3"
+    "play:10fps": "node play_bad_apple.js --fps 10"
   },
   "dependencies": {
     "playwright": "^1.35.0",

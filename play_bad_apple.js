@@ -10,12 +10,12 @@
  *   node play_bad_apple.js [options]
  *
  * Options:
- *   --masks-dir <path>   Mask JSON directory        (default: ./masks)
- *   --fps <number>       Target FPS                 (default: 30)
- *   --url <url>          ARMLite URL                (default: online)
- *   --audio <path>       Audio file to play (mp3/wav/ogg)
- *   --start-frame <n>    First frame number         (default: 1)
- *   --end-frame <n>      Last frame number           (default: all)
+ *   --masks-dir <path>   Mask JSON directory                (default: ./masks)
+ *   --fps <number>       Target FPS                         (default: 30)
+ *   --url <url>          ARMLite URL                        (default: online)
+ *   --audio <path>       Audio file to play (mp3/wav/ogg)   (default: ./bad_apple.mp3)
+ *   --start-frame <n>    First frame number                 (default: 1)
+ *   --end-frame <n>      Last frame number                  (default: all)
  *   --browser <path>     Custom Chromium executable
  *   --headless           Run headless
  *   --local              Use http://localhost:3000/
@@ -33,7 +33,7 @@ function parseArgs() {
     .option('masks-dir', { type: 'string', default: './masks' })
     .option('fps', { type: 'number', default: 30 })
     .option('url', { type: 'string', default: 'https://peterhigginson.co.uk/ARMlite/' })
-    .option('audio', { type: 'string', default: null })
+    .option('audio', { type: 'string', default: './bad_apple.mp3' })
     .option('start-frame', { type: 'number', default: 1 })
     .option('end-frame', { type: 'number' })
     .option('browser', { type: 'string', default: null })
@@ -403,7 +403,7 @@ async function main() {
         '║ Res:      ' + resW + '×' + resH + '\n' +
         '║ Pixels:   ' + pixelAreaSize + '\n' +
         '║ Audio:    ' + (hasAudio ? 'yes' : 'no') + (hasAudio ? ' (' + audio.duration.toFixed(1) + 's)' : '') + '\n' +
-        '╚════════════════════════════════════╝';
+        '╚═════════════════════════════════════╝';
     }
 
     // ── Helpers ──
@@ -653,7 +653,7 @@ async function main() {
     if (/^Done!/.test(st)) { console.log('\nPlayback complete!'); break; }
   }
 
-  console.log('Close the browser when ready or press Ctrl+C.');
+  console.log('Close the browser when ready and press Ctrl+C.');
   await new Promise(() => {});
 }
 
