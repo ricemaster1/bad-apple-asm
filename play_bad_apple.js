@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
-const yargs = require('yargs/yargs');
+const yargs = require('yargs');
 const { hideBin } = require('yargs/helpers');
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
